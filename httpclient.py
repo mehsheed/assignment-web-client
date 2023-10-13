@@ -23,7 +23,7 @@ import socket
 import re
 
 # you may use urllib to encode data appropriately
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode
 
 
 def help():
@@ -47,12 +47,15 @@ class HTTPClient(object):
     def parse_url(self, url):
         parsed_obj = urlparse(url)
         port = parsed_obj.port
+        query = parsed_obj.query
         path = parsed_obj.path
 
         if not port:
             port = 80
         if not path:
             path = "/"
+        if query:
+            path += "?{}".format(query)
 
         return parsed_obj.hostname, port, path
 
@@ -97,12 +100,36 @@ class HTTPClient(object):
         response = self.recvall(self.socket)
         code = self.get_code(response)
         body = self.get_body(response)
-        self.close()
+        print(body)
+        self.socket.close()
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
-        code = 500
-        body = ""
+        hostname, port, path = self.parse_url(url)
+        self.connect(hostname, port)
+        request = ""
+
+        if args:
+            request_body = urlencode(args, doseq=True)
+            content_type = "\r\nContent-Type: application/x-www-form-urlencoded"
+            content_length = str(len(request_body))
+        else:
+            content_length = str(0)
+            request_body = ""
+            content_type = ""
+
+        request = "POST {} HTTP/1.1\r\nHost: {}\r\nAccept: */*\r\n \
+                        Connection: Closed\r\nContent-Length: {}{}\r\n\r\n{}".format(
+            path, hostname, content_length, content_type, request_body
+        )
+
+        self.sendall(request)
+        response = self.recvall(self.socket)
+
+        code = self.get_code(response)
+        body = self.get_body(response)
+        print(body)
+        self.socket.close()
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
